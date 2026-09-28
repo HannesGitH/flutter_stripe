@@ -2,6 +2,7 @@ package com.reactnativestripesdk
 
 import android.annotation.SuppressLint
 import androidx.activity.ComponentActivity
+import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.reactnativestripesdk.utils.ConfirmPaymentErrorType
 import com.reactnativestripesdk.utils.ConfirmSetupIntentErrorType
@@ -211,58 +212,7 @@ class PaymentLauncherManager(
         }
 
         override fun onSuccess(result: SetupIntent) {
-          when (result.status) {
-            StripeIntent.Status.Succeeded,
-            StripeIntent.Status.Processing,
-            StripeIntent.Status.RequiresConfirmation,
-            StripeIntent.Status.RequiresCapture,
-            -> {
-              promise?.resolve(createResult("setupIntent", mapFromSetupIntentResult(result)))
-            }
-            StripeIntent.Status.RequiresAction -> {
-              if (isNextActionSuccessState(result.nextActionType)) {
-                promise?.resolve(createResult("setupIntent", mapFromSetupIntentResult(result)))
-              } else {
-                (result.lastSetupError)?.let {
-                  promise?.resolve(
-                    createError(ConfirmSetupIntentErrorType.Canceled.toString(), it),
-                  )
-                }
-                  ?: run {
-                    promise?.resolve(
-                      createError(
-                        ConfirmSetupIntentErrorType.Canceled.toString(),
-                        "Setup has been canceled",
-                      ),
-                    )
-                  }
-              }
-            }
-            StripeIntent.Status.RequiresPaymentMethod -> {
-              promise?.resolve(
-                createError(
-                  ConfirmSetupIntentErrorType.Failed.toString(),
-                  result.lastSetupError,
-                ),
-              )
-            }
-            StripeIntent.Status.Canceled -> {
-              promise?.resolve(
-                createError(
-                  ConfirmSetupIntentErrorType.Canceled.toString(),
-                  result.lastSetupError,
-                ),
-              )
-            }
-            else -> {
-              promise?.resolve(
-                createError(
-                  ConfirmSetupIntentErrorType.Unknown.toString(),
-                  "unhandled error: ${result.status}",
-                ),
-              )
-            }
-          }
+          resolveSetupIntent(result, promise)
         }
       },
     )
@@ -333,31 +283,89 @@ class PaymentLauncherManager(
       },
     )
   }
-
-  /**
-   * Check if paymentIntent.nextAction is out-of-band, such as voucher-based or waiting on customer
-   * verification. If it is, then being in this state is considered "successful".
-   */
-  private fun isNextActionSuccessState(nextAction: StripeIntent.NextActionType?): Boolean =
-    when (nextAction) {
-      StripeIntent.NextActionType.DisplayOxxoDetails,
-      StripeIntent.NextActionType.DisplayBoletoDetails,
-      StripeIntent.NextActionType.DisplayKonbiniDetails,
-      StripeIntent.NextActionType.DisplayPayNowDetails,
-      StripeIntent.NextActionType.VerifyWithMicrodeposits,
-      StripeIntent.NextActionType.DisplayMultibancoDetails,
-      StripeIntent.NextActionType.DisplayPayNowDetails,
-      StripeIntent.NextActionType.DisplayPromptPayDetails,
-      -> true
-      StripeIntent.NextActionType.RedirectToUrl,
-      StripeIntent.NextActionType.UseStripeSdk,
-      StripeIntent.NextActionType.AlipayRedirect,
-      StripeIntent.NextActionType.BlikAuthorize,
-      StripeIntent.NextActionType.WeChatPayRedirect,
-      StripeIntent.NextActionType.CashAppRedirect,
-      StripeIntent.NextActionType.SwishRedirect,
-      StripeIntent.NextActionType.DisplayPromptPayDetails,
-      null,
-      -> false
-    }
 }
+
+internal fun resolveSetupIntent(
+  result: SetupIntent,
+  promise: Promise?,
+) {
+  when (result.status) {
+    StripeIntent.Status.Succeeded,
+    StripeIntent.Status.Processing,
+    StripeIntent.Status.RequiresConfirmation,
+    StripeIntent.Status.RequiresCapture,
+    -> {
+      promise?.resolve(createResult("setupIntent", mapFromSetupIntentResult(result)))
+    }
+    StripeIntent.Status.RequiresAction -> {
+      if (isNextActionSuccessState(result.nextActionType)) {
+        promise?.resolve(createResult("setupIntent", mapFromSetupIntentResult(result)))
+      } else {
+        (result.lastSetupError)?.let {
+          promise?.resolve(
+            createError(ConfirmSetupIntentErrorType.Canceled.toString(), it),
+          )
+        }
+          ?: run {
+            promise?.resolve(
+              createError(
+                ConfirmSetupIntentErrorType.Canceled.toString(),
+                "Setup has been canceled",
+              ),
+            )
+          }
+      }
+    }
+    StripeIntent.Status.RequiresPaymentMethod -> {
+      promise?.resolve(
+        createError(
+          ConfirmSetupIntentErrorType.Failed.toString(),
+          result.lastSetupError,
+        ),
+      )
+    }
+    StripeIntent.Status.Canceled -> {
+      promise?.resolve(
+        createError(
+          ConfirmSetupIntentErrorType.Canceled.toString(),
+          result.lastSetupError,
+        ),
+      )
+    }
+    else -> {
+      promise?.resolve(
+        createError(
+          ConfirmSetupIntentErrorType.Unknown.toString(),
+          "unhandled error: ${result.status}",
+        ),
+      )
+    }
+  }
+}
+
+/**
+ * Check if paymentIntent.nextAction is out-of-band, such as voucher-based or waiting on customer
+ * verification. If it is, then being in this state is considered "successful".
+ */
+internal fun isNextActionSuccessState(nextAction: StripeIntent.NextActionType?): Boolean =
+  when (nextAction) {
+    StripeIntent.NextActionType.DisplayOxxoDetails,
+    StripeIntent.NextActionType.DisplayBoletoDetails,
+    StripeIntent.NextActionType.DisplayKonbiniDetails,
+    StripeIntent.NextActionType.DisplayPayNowDetails,
+    StripeIntent.NextActionType.VerifyWithMicrodeposits,
+    StripeIntent.NextActionType.DisplayMultibancoDetails,
+    StripeIntent.NextActionType.DisplayPayNowDetails,
+    StripeIntent.NextActionType.DisplayPromptPayDetails,
+    -> true
+    StripeIntent.NextActionType.RedirectToUrl,
+    StripeIntent.NextActionType.UseStripeSdk,
+    StripeIntent.NextActionType.AlipayRedirect,
+    StripeIntent.NextActionType.BlikAuthorize,
+    StripeIntent.NextActionType.WeChatPayRedirect,
+    StripeIntent.NextActionType.CashAppRedirect,
+    StripeIntent.NextActionType.SwishRedirect,
+    StripeIntent.NextActionType.DisplayPromptPayDetails,
+    null,
+    -> false
+  }

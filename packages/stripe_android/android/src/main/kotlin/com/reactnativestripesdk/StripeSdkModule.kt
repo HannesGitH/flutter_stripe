@@ -127,6 +127,8 @@ class StripeSdkModule(
 
   val eventEmitter: EventEmitterCompat by lazy { EventEmitterCompat(reactApplicationContext) }
 
+  private val legacySetupIntentLauncher = LegacySetupIntentLauncher()
+
   private val mActivityEventListener =
     object : BaseActivityEventListener() {
       override fun onActivityResult(
@@ -136,6 +138,7 @@ class StripeSdkModule(
         data: Intent?,
       ) {
         if (::stripe.isInitialized) {
+          legacySetupIntentLauncher.onActivityResult(requestCode, resultCode, data)
           when (requestCode) {
             GooglePayRequestHelper.LOAD_PAYMENT_DATA_REQUEST_CODE -> {
               createPlatformPayPaymentMethodPromise?.let {
@@ -601,19 +604,8 @@ class StripeSdkModule(
     returnUrl: String?,
     promise: Promise,
   ) {
-    unregisterStripeUIManager(paymentLauncherManager)
-    paymentLauncherManager =
-      PaymentLauncherManager
-        .forNextActionSetup(
-          context = reactApplicationContext,
-          stripe,
-          publishableKey,
-          stripeAccountId,
-          setupIntentClientSecret,
-        ).also {
-          registerStripeUIManager(it)
-          it.present(promise)
-        }
+    val activity = getCurrentActivityOrResolveWithError(promise) ?: return
+    legacySetupIntentLauncher.handleNextAction(stripe, activity, setupIntentClientSecret, promise)
   }
 
 // TODO: Uncomment when WeChat is re-enabled in stripe-ios
@@ -768,20 +760,8 @@ class StripeSdkModule(
       urlScheme?.let {
         confirmParams.returnUrl = mapToReturnURL(urlScheme)
       }
-      unregisterStripeUIManager(paymentLauncherManager)
-      paymentLauncherManager =
-        PaymentLauncherManager
-          .forSetup(
-            context = reactApplicationContext,
-            stripe,
-            publishableKey,
-            stripeAccountId,
-            setupIntentClientSecret,
-            confirmParams,
-          ).also {
-            registerStripeUIManager(it)
-            it.present(promise)
-          }
+      val activity = getCurrentActivityOrResolveWithError(promise) ?: return
+      legacySetupIntentLauncher.confirm(stripe, activity, confirmParams, promise)
     } catch (error: PaymentMethodCreateParamsException) {
       promise.resolve(createError(ConfirmPaymentErrorType.Failed.toString(), error))
     }
