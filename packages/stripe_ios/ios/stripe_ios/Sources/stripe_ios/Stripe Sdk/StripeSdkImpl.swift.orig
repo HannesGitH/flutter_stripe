@@ -601,38 +601,11 @@ public class StripeSdkImpl: NSObject, UIAdaptivePresentationControllerDelegate {
             self.confirmApplePaySetupClientSecret = clientSecret
         }
         if let applePayContext = STPApplePayContext(paymentRequest: paymentRequest, delegate: self) {
-            // PassKit refuses to present while the app is inactive, e.g. right after a
-            // system prompt, and that refusal reaches the delegate as a user cancellation.
-            presentWhenActive {
+            DispatchQueue.main.async {
                 applePayContext.presentApplePay(completion: nil)
             }
         } else {
             resolve(Errors.createError(ErrorType.Failed, "Payment not completed"))
-        }
-    }
-
-    /// Runs `present` once the app is active. Gives up waiting after `timeout`, because an
-    /// app can stay inactive for as long as the user keeps the notification centre open.
-    func presentWhenActive(timeout: TimeInterval = 3, _ present: @escaping () -> Void) {
-        DispatchQueue.main.async {
-            if UIApplication.shared.applicationState == .active {
-                present()
-                return
-            }
-            var observer: NSObjectProtocol?
-            var didPresent = false
-            let presentOnce = {
-                guard !didPresent else { return }
-                didPresent = true
-                if let observer { NotificationCenter.default.removeObserver(observer) }
-                present()
-            }
-            observer = NotificationCenter.default.addObserver(
-                forName: UIApplication.didBecomeActiveNotification,
-                object: nil,
-                queue: .main
-            ) { _ in presentOnce() }
-            DispatchQueue.main.asyncAfter(deadline: .now() + timeout, execute: presentOnce)
         }
     }
 
